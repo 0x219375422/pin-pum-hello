@@ -10,20 +10,61 @@
   <main>
     <p class="eyebrow">SpaceXAI · grok</p>
     <h1>Pin Pum Hello</h1>
-    <p>Ask Grok something short. The reply comes from <code>POST /api/chat</code>.</p>
+    <p>Ask Grok something short. Chat stays on <code>POST /api/chat</code>. Speak a reply with <code>POST /api/voice</code>, or generate an image with <code>POST /api/image</code>.</p>
+
     <form id="chat">
       <label for="prompt">Prompt</label>
       <textarea id="prompt" name="prompt" rows="4" maxlength="8000" required placeholder="Say hello in one sentence."></textarea>
-      <button type="submit">Send</button>
+      <label class="check"><input id="speak-after" type="checkbox" /> Speak the reply</label>
+      <div class="actions">
+        <button type="submit">Send</button>
+        <button id="speak" type="button" class="secondary" disabled>Speak reply</button>
+      </div>
     </form>
     <pre id="reply" class="reply" hidden></pre>
+    <audio id="player" controls hidden></audio>
     <p id="status" class="meta" role="status"></p>
+
+    <form id="image-form">
+      <label for="image-prompt">Image prompt</label>
+      <textarea id="image-prompt" name="prompt" rows="3" maxlength="4000" required placeholder="A small paper boat on a quiet lake at dusk."></textarea>
+      <button type="submit">Generate image</button>
+    </form>
+    <img id="picture" class="picture" alt="Generated image" hidden />
+    <p id="image-status" class="meta" role="status"></p>
   </main>
   <script>
     const form = document.querySelector("#chat");
     const prompt = document.querySelector("#prompt");
     const reply = document.querySelector("#reply");
     const status = document.querySelector("#status");
+    const speakAfter = document.querySelector("#speak-after");
+    const speakBtn = document.querySelector("#speak");
+    const player = document.querySelector("#player");
+    const imageForm = document.querySelector("#image-form");
+    const imagePrompt = document.querySelector("#image-prompt");
+    const picture = document.querySelector("#picture");
+    const imageStatus = document.querySelector("#image-status");
+    let audioUrl = "";
+
+    async function speakText(text) {
+      status.textContent = "Speaking…";
+      const res = await fetch("/api/voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "voice request failed");
+      }
+      const blob = await res.blob();
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+      audioUrl = URL.createObjectURL(blob);
+      player.src = audioUrl;
+      player.hidden = false;
+      await player.play().catch(() => {});
+    }
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -31,6 +72,7 @@
       if (!text) return;
       status.textContent = "Thinking…";
       reply.hidden = true;
+      speakBtn.disabled = true;
       try {
         const res = await fetch("/api/chat", {
           method: "POST",
@@ -41,9 +83,50 @@
         if (!res.ok) throw new Error(data.error || "request failed");
         reply.textContent = data.reply || "";
         reply.hidden = false;
+        speakBtn.disabled = !reply.textContent;
         status.textContent = data.model ? "model " + data.model : "";
+        if (speakAfter.checked && reply.textContent) {
+          await speakText(reply.textContent);
+          status.textContent = (data.model ? "model " + data.model + " · " : "") + "spoken";
+        }
       } catch (err) {
         status.textContent = err.message || "request failed";
+      }
+    });
+
+    speakBtn.addEventListener("click", async () => {
+      const text = reply.textContent.trim();
+      if (!text) return;
+      speakBtn.disabled = true;
+      try {
+        await speakText(text);
+        status.textContent = "spoken";
+      } catch (err) {
+        status.textContent = err.message || "voice request failed";
+      } finally {
+        speakBtn.disabled = !reply.textContent.trim();
+      }
+    });
+
+    imageForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const text = imagePrompt.value.trim();
+      if (!text) return;
+      imageStatus.textContent = "Generating…";
+      picture.hidden = true;
+      try {
+        const res = await fetch("/api/image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: text }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "image request failed");
+        picture.src = data.url;
+        picture.hidden = false;
+        imageStatus.textContent = data.model ? "model " + data.model : "";
+      } catch (err) {
+        imageStatus.textContent = err.message || "image request failed";
       }
     });
   </script>
