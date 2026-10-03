@@ -7,5 +7,10 @@
     "start": "node server.mjs",
     "dev": "node --watch server.mjs"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "@xai-official/sdk": "^0.2.1"
+  }
 }

@@ -8,10 +8,44 @@
 </head>
 <body>
   <main>
-    <p class="eyebrow">GitHub · box</p>
+    <p class="eyebrow">SpaceXAI · grok</p>
     <h1>Pin Pum Hello</h1>
-    <p>Minimal app scaffolded for Da Si. Swap this page for whatever ships next.</p>
-    <p class="meta">Node static server · no secrets in repo</p>
+    <p>Ask Grok something short. The reply comes from <code>POST /api/chat</code>.</p>
+    <form id="chat">
+      <label for="prompt">Prompt</label>
+      <textarea id="prompt" name="prompt" rows="4" maxlength="8000" required placeholder="Say hello in one sentence."></textarea>
+      <button type="submit">Send</button>
+    </form>
+    <pre id="reply" class="reply" hidden></pre>
+    <p id="status" class="meta" role="status"></p>
   </main>
+  <script>
+    const form = document.querySelector("#chat");
+    const prompt = document.querySelector("#prompt");
+    const reply = document.querySelector("#reply");
+    const status = document.querySelector("#status");
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const text = prompt.value.trim();
+      if (!text) return;
+      status.textContent = "Thinking…";
+      reply.hidden = true;
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: text }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "request failed");
+        reply.textContent = data.reply || "";
+        reply.hidden = false;
+        status.textContent = data.model ? "model " + data.model : "";
+      } catch (err) {
+        status.textContent = err.message || "request failed";
+      }
+    });
+  </script>
 </body>
 </html>
